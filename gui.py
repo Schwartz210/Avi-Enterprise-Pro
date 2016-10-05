@@ -137,9 +137,6 @@ class Report(object):
         self.filter_by = filter_by
         self.set_fields(fields)
         self.sorted_by_field = 0
-        self.rightmost_column = len(self.display_fields) - 1
-        self.width = 600
-        self.height = 800
         self.master = Toplevel()
         self.master.title('Reporting')
         self.master.iconbitmap('image/record.ico')
@@ -147,9 +144,11 @@ class Report(object):
         self.canvas1 = Canvas(self.master)
         self.canvas2 = Canvas(self.master)
         self.refresh_report()
-        mainloop()
 
     def set_fields(self, fields):
+        '''
+        Sets the following three attributes: self.sp_field, self.display_fields, self.fields.
+        '''
         self.sp_field = special_id[self.report_type]
         if self.sp_field not in fields:
             self.display_fields = list(fields)
@@ -161,7 +160,8 @@ class Report(object):
 
     def field_name_modifier(self, fields):
         '''
-        Used only for 'mixed' reports
+        Loops through fields concatenating their respective table names.
+        Example: Phone --> contacts.Phone
         '''
         out = []
         for field in fields:
@@ -169,25 +169,49 @@ class Report(object):
             out.append(new_name)
         return out
 
-    def get_sql_data(self):
-        field_query = ''
+    def mixed_report_handler(self):
         if self.report_type == 'mixed':
             fields = list(self.field_name_modifier(self.fields))
         else:
             fields = list(self.fields)
+        return fields
 
+    def build_field_query(self):
+        '''
+        Returns the 'First_name, Last_name, Phone' string in the SQL statement:
+        'SELECT First_name, Last_name, Phone FROM some_table'
+        '''
+        fields = self.mixed_report_handler()
+        field_query = ''
         for field in fields:
             if fields_type_mapping[field] == self.report_type:
                 field_query += field + ','
+        return field_query
+
+    def make_SQL_request(self, field_query):
+        '''
+        Returns string SQL requests.
+        '''
         if self.filter_by:
-            sql_request = select_fields_where(field_query[:-1],self.report_type, self.filter_by[0],self.filter_by[1])
+            return select_fields_where(field_query[:-1],self.report_type, self.filter_by[0],self.filter_by[1])
         else:
-            sql_request = select(field_query[:-1], self.report_type)
+            return select(field_query[:-1], self.report_type)
+
+    def get_sql_data(self):
+        '''
+        Sets self.data with data pulled from SQL database
+        '''
+        field_query = self.build_field_query()
+        sql_request = self.make_SQL_request(field_query)
         self.data = pull_data(sql_request)
         if self.total_amount:
             self.aggregation_handler()
 
     def aggregation_handler(self):
+        '''
+        This method is used for summing many sales orders and passing on the amount. Summation is done in SQL not-
+        python.
+        '''
         field_equiv = {'Amount' : 'Customer_ID'}
         field = field_equiv[self.total_amount]
         ind = self.fields.index(self.sp_field)
@@ -197,31 +221,32 @@ class Report(object):
                 record.append(total)
 
     def canvas_master_processs(self):
+        '''
+        Destroys old canvases, builds new ones, thereby refreshing.
+        '''
         self.canvas1.destroy()
         self.canvas2.destroy()
         self.canvas1 = Canvas(self.master)
         self.canvas2 = Canvas(self.master)
         self.determine_button_width()
+        self.layout_top()
         self.layout_headers()
         self.layout_buttons()
         self.canvas1.grid()
         self.canvas2.grid()
 
+    def layout_top(self):
+        '''
+        Creates the report buttons for 'Custom', 'Refresh', and 'Excel'
+        '''
+        Button(self.canvas1,borderwidth=0,image=self.photo_custom,command=self.customize_report).grid(column=0, row=0)
+        Button(self.canvas1,borderwidth=0,image=self.photo_refresh,command=self.refresh_report).grid(column=1, row=0)
+        Button(self.canvas1,borderwidth=0,image=self.photo_excel,command=lambda: export(self.data)).grid(column=2, row=0)
+
     def layout_headers(self):
-        Button(self.canvas1,
-               borderwidth=0,
-               image=self.photo_custom,
-               command=self.customize_report).grid(column=0, row=0)
-
-        Button(self.canvas1,
-               borderwidth=0,
-               image=self.photo_refresh,
-               command=self.refresh_report).grid(column=1, row=0)
-        Button(self.canvas1,
-               borderwidth=0,
-               image=self.photo_excel,
-               command=lambda: export(self.data)).grid(column=2, row=0)
-
+        '''
+        Creates report headers
+        '''
         iterator_column = 0
         for field in self.display_fields:
             text = field.replace('_',' ')
@@ -237,6 +262,9 @@ class Report(object):
             iterator_column += 1
 
     def layout_buttons(self):
+        '''
+        This deplorable method lays out the buttons on the report screen. This badly needs to be refactored.
+        '''
         iterator_row = 2
         total_index = self.get_total_index()
         for record in self.data:
@@ -256,7 +284,6 @@ class Report(object):
                         Button(self.canvas2,text=field,width=self.button_width[iterator_field],height=1,borderwidth=0,command=partial(self.open_record_window,record[0]),anchor=W).grid(row=iterator_row,column=iterator_field,sticky=S)
                     iterator_field += 1
             iterator_row += 1
-
 
     def convert_data_to_dict(self):
         self.data_dict = {}
@@ -324,7 +351,6 @@ class CustomerCenter(Report):
         self.sp_field = special_id[self.report_type]
         self.set_fields(fields)
         self.sorted_by_field = 0
-        self.rightmost_column = len(self.display_fields) - 1
         self.master = Toplevel()
         self.master.title('Reporting')
         self.master.iconbitmap('image/record.ico')
@@ -332,7 +358,6 @@ class CustomerCenter(Report):
         self.canvas1 = Canvas(self.master)
         self.canvas2 = Canvas(self.master)
         self.refresh_report()
-        mainloop()
 
     def canvas_master_processs(self):
         self.canvas1.destroy()
@@ -434,7 +459,6 @@ class CustomizeReportWindow(object):
         self.check_dict = {}
         self.fields = list(type_to_fields[self.report_type])
         self.layout()
-        self.master.mainloop()
 
     def layout(self):
         self.width = 100

@@ -1,13 +1,13 @@
-import Tkinter
-import tkMessageBox
-
-top = Tkinter.Tk()
-def deleteme():
-    tkMessageBox.askquestion("Delete", "Are You Sure?", icon='warning')
-    if 'yes':
-        print "Deleted"
+def option1(self, field_query):
+    if self.filter_by:
+        return select_fields_where(field_query[:-1],report_type, filter_by[0],filter_by[1])
     else:
-        print "I'm Not Deleted Yet"
-B1 = Tkinter.Button(top, text = "Delete", command = deleteme)
-B1.pack()
-top.mainloop()
+        return select(field_query[:-1], report_type)
+
+
+def option2(self, field_query):
+    if self.filter_by:
+        sql_request = select_fields_where(field_query[:-1],report_type, filter_by[0],filter_by[1])
+    else:
+        sql_request = select(field_query[:-1], report_type)
+    return sql_request
