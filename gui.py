@@ -18,13 +18,17 @@ def null_entry_handler(entry):
         return entry.get()
 
 class HomeScreen(object):
+    '''
+    This class is home window. It's the first screen you see when program is initiated. When it's closed, the entire-
+    program stops running.
+    '''
     def __init__(self):
         self.master = Tk()
-        self.build_canvas()
+        self.layout()
         self.menubar()
         self.master.mainloop()
 
-    def build_canvas(self):
+    def layout(self):
         self.master.title('Avi Enterprise Pro')
         self.master.wm_geometry("600x600")
         self.photo_contact = ImageTk.PhotoImage(Image.open('image/contact.png'))
@@ -87,15 +91,18 @@ class HomeScreen(object):
 
 
 class CreateRecordWindow(object):
+    '''
+    The window is allows the user to create a new contact record.
+    '''
     def __init__(self, report_type):
         self.report_type = report_type
-        self.master = Tk()
+        self.master = Toplevel()
         icon = 'image/%s.ico' % (report_type)
         self.master.iconbitmap(icon)
         self.entries = []
-        self.build_canvas()
+        self.layout()
 
-    def build_canvas(self):
+    def layout(self):
         fields = list(type_to_fields[self.report_type])
         spec_id = special_id[self.report_type]
         fields.remove(spec_id)
@@ -120,6 +127,10 @@ class CreateRecordWindow(object):
 
 
 class Report(object):
+    '''
+    This is the most important class in this program. This class is for a window that is populated by data from a-
+    customized report.
+    '''
     def __init__(self, report_type, fields, total_amount=None, filter_by=None):
         self.report_type = report_type
         self.total_amount = total_amount
@@ -169,10 +180,9 @@ class Report(object):
             if fields_type_mapping[field] == self.report_type:
                 field_query += field + ','
         if self.filter_by:
-            sql_request = select_fields_where(field_query[:-1],self.report_type, self.sp_field,self.filter_by)
+            sql_request = select_fields_where(field_query[:-1],self.report_type, self.filter_by[0],self.filter_by[1])
         else:
             sql_request = select(field_query[:-1], self.report_type)
-        print(sql_request)
         self.data = pull_data(sql_request)
         if self.total_amount:
             self.aggregation_handler()
@@ -229,7 +239,6 @@ class Report(object):
     def layout_buttons(self):
         iterator_row = 2
         total_index = self.get_total_index()
-        print(total_index)
         for record in self.data:
             iterator_field = 0
             if self.sp_field in self.display_fields:
@@ -242,11 +251,17 @@ class Report(object):
             else:
                 for field in record[1:]:
                     if record.index(field) == total_index:
-                        Button(self.canvas2,text=field,width=self.button_width[iterator_field],height=1,borderwidth=0,command=partial(self.open_total_amount_window,record[0]),anchor=W, bg='blue').grid(row=iterator_row,column=iterator_field,sticky=S)
+                        Button(self.canvas2,text=field,width=self.button_width[iterator_field],height=1,borderwidth=0,command=partial(self.open_total_amount_window,record[0]),anchor=W).grid(row=iterator_row,column=iterator_field,sticky=S)
                     else:
                         Button(self.canvas2,text=field,width=self.button_width[iterator_field],height=1,borderwidth=0,command=partial(self.open_record_window,record[0]),anchor=W).grid(row=iterator_row,column=iterator_field,sticky=S)
                     iterator_field += 1
             iterator_row += 1
+
+
+    def convert_data_to_dict(self):
+        self.data_dict = {}
+        for record in self.data:
+            self.data_dict[record[0]] = record[1:]
 
     def get_total_index(self):
         if self.total_amount:
@@ -265,9 +280,8 @@ class Report(object):
         RecordWindow(self.report_type, ID)
 
     def open_total_amount_window(self, ID):
-        print('soso')
         fields = list(type_to_fields['sales'])
-        Report('sales',fields,filter_by=ID)
+        Report('sales',fields,filter_by=['Customer_ID', ID])
 
     def custom_sort(self, field):
         if self.sp_field not in self.display_fields:
@@ -301,21 +315,22 @@ class Report(object):
 
 
 class CustomerCenter(Report):
+    '''
+    This window shows the customer name and how much in sales order came from them. It was an important lesson in-
+    cross-referencing data from different tables.
+    '''
     def __init__(self, report_type, fields):
         self.report_type = report_type
         self.sp_field = special_id[self.report_type]
         self.set_fields(fields)
         self.sorted_by_field = 0
         self.rightmost_column = len(self.display_fields) - 1
-        self.width = 600
-        self.height = 800
         self.master = Toplevel()
         self.master.title('Reporting')
         self.master.iconbitmap('image/record.ico')
         self.prepare_images()
         self.canvas1 = Canvas(self.master)
         self.canvas2 = Canvas(self.master)
-        self.canvas3 = Canvas(self.master)
         self.refresh_report()
         mainloop()
 
@@ -331,10 +346,12 @@ class CustomerCenter(Report):
         self.layout_buttons()
         self.canvas1.grid(row=0)
         self.canvas2.grid(column=0, row=1)
-        self.canvas3.grid(column=1, row=1)
 
 
 class RecordWindow(object):
+    '''
+    This window displays a single contact record. It presents the user with the option to 'Edit', 'Exit', or 'Delete'.
+    '''
     def __init__(self, report_type, ID):
         self.report_type = report_type
         self.sp_field = special_id[self.report_type]
@@ -408,6 +425,9 @@ class RecordWindow(object):
 
 
 class CustomizeReportWindow(object):
+    '''
+    This window allows the user to customize the report fields.
+    '''
     def __init__(self, report_type):
         self.report_type = report_type
         self.master = Toplevel()
@@ -439,6 +459,9 @@ class CustomizeReportWindow(object):
 
 
 class DeleteRecordWindow(object):
+    '''
+    This window the user encounters when they are deleting a contact record.
+    '''
     def __init__(self, parameters):
         self.parameters = parameters
         self.master = Toplevel()
