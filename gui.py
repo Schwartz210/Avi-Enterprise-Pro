@@ -1,5 +1,5 @@
 __author__ = 'aschwartz - Schwartz210@gmail.com'
-from db_interface import add_record, pull_data, update_record, select, select_where, field_name, query_sum, fields_type_mapping, delete_where, select_fields_where
+from db_interface import add_record, pull_data, update_record, field_name, query_sum, fields_type_mapping, flexible_SQL, delete_where
 from excel import export
 from tkinter import *
 from functools import partial
@@ -136,7 +136,7 @@ class Report(object):
         self.total_amount = total_amount
         self.filter_by = filter_by
         self.set_fields(fields)
-        self.sorted_by_field = 0
+        self.ordered_field = ()
         self.master = Toplevel()
         self.master.title('Reporting')
         self.master.iconbitmap('image/record.ico')
@@ -188,21 +188,12 @@ class Report(object):
                 field_query += field + ','
         return field_query
 
-    def make_SQL_request(self, field_query):
-        '''
-        Returns string SQL requests.
-        '''
-        if self.filter_by:
-            return select_fields_where(field_query[:-1],self.report_type, self.filter_by[0],self.filter_by[1])
-        else:
-            return select(field_query[:-1], self.report_type)
-
     def get_sql_data(self):
         '''
         Sets self.data with data pulled from SQL database
         '''
         field_query = self.build_field_query()
-        sql_request = self.make_SQL_request(field_query)
+        sql_request = flexible_SQL(field_query[:-1], self.report_type, where=self.filter_by, order_by=self.ordered_field)
         self.data = pull_data(sql_request)
         if self.total_amount:
             self.aggregation_handler()
@@ -285,18 +276,18 @@ class Report(object):
                     iterator_field += 1
             iterator_row += 1
 
-    def convert_data_to_dict(self):
-        self.data_dict = {}
-        for record in self.data:
-            self.data_dict[record[0]] = record[1:]
-
     def get_total_index(self):
+        '''
+        Returns the index for the field that is getting totalled, or None if n/a
+        '''
         if self.total_amount:
             return self.fields.index(self.total_amount)
-        else:
-            return None
+        return None
 
     def refresh_report(self):
+        '''
+        Submits a new SQL query and erases and lays out all GUI window elements.
+        '''
         self.get_sql_data()
         self.canvas_master_processs()
 
@@ -310,18 +301,28 @@ class Report(object):
         fields = list(type_to_fields['sales'])
         Report('sales',fields,filter_by=['Customer_ID', ID])
 
-    def custom_sort(self, field):
-        if self.sp_field not in self.display_fields:
-            field += 1
-        self.data.sort(key=lambda x: x[field])
-        if field == self.sorted_by_field:
-            self.data.reverse()
-            self.sorted_by_field = ''
+    def custom_sort(self, field_index):
+        '''
+        Reorders the report based on field and ascending or descending order. Receives input from field button. Sets-
+        self.ordered_field attribute. Refreshes report.
+        '''
+        field = self.display_fields[field_index]
+        flip = {'ASC' : 'DESC', 'DESC' : 'ASC'}
+        if not self.ordered_field or self.ordered_field[0] != field:
+            self.ordered_field = (field, 'ASC')
+        elif self.ordered_field[0] == field:
+            direction = flip[self.ordered_field[1]]
+            self.ordered_field = (field, direction)
         else:
-            self.sorted_by_field = field
-        self.canvas_master_processs()
+            raise Exception()
+        self.refresh_report()
 
     def determine_button_width(self):
+        '''
+        This method loops through the fields, determining the max len for each field and setting self.button_width as-
+        a list of those values. The purpose is aesthetic in that it makes it so column are sized roughly accordingly to-
+        the length thats required, rather than uniformly across all fields.
+        '''
         self.button_width = []
         for field in self.display_fields:
             ind = self.fields.index(field)
@@ -329,6 +330,9 @@ class Report(object):
             self.button_width.append(max_value)
 
     def list_of_list_column_len(self, list_of_lists, column, header):
+        '''
+        Return the max len for a single field
+        '''
         max_value = len(header)
         for lst in list_of_lists:
             if len(str(lst[column])) > max_value:
@@ -350,7 +354,6 @@ class CustomerCenter(Report):
         self.report_type = report_type
         self.sp_field = special_id[self.report_type]
         self.set_fields(fields)
-        self.sorted_by_field = 0
         self.master = Toplevel()
         self.master.title('Reporting')
         self.master.iconbitmap('image/record.ico')
@@ -391,7 +394,8 @@ class RecordWindow(object):
         self.build_canvas()
 
     def get_data(self):
-        sql_request = select_where(self.report_type, self.sp_field,  self.ID)
+        where = [self.sp_field, self.ID]
+        sql_request = flexible_SQL('*', self.report_type, where=where)
         try:
             self.data = pull_data(sql_request)[0]
         except:

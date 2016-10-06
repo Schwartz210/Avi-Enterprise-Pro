@@ -18,18 +18,18 @@ fields_type_mapping = {'ID' : 'contacts',
                        'Amount' : 'sales',
                        'Order_date' : 'sales'}
 
-def select(field, table):
-    return 'SELECT %s FROM %s' % (field, tables[table])
-
-def select_where(table, field, criteria):
-    return 'SELECT * FROM %s WHERE %s="%s"' % (tables[table], field, criteria)
-
-def select_fields_where(get_fields, table, where_field, criteria):
-    return 'SELECT %s FROM %s WHERE %s="%s"' % (get_fields, tables[table], where_field, criteria)
-
-def delete_where(table, field, criteria):
-    sql_request = 'DELETE FROM %s WHERE %s="%s"' % (tables[table], field, criteria)
-    execute_sql(sql_request)
+def flexible_SQL(get_fields, table, **kwargs):
+    '''
+    Returns a SQL_request(string). Supports 'WHERE' and 'ORDER BY' statements.
+    '''
+    SQL_request =  'SELECT %s FROM %s' % (get_fields, tables[table])
+    if kwargs['where']:
+        where_field, criteria = kwargs['where']
+        SQL_request += ' WHERE %s="%s"' % (where_field, criteria)
+    if 'order_by' in kwargs and kwargs['order_by']:
+        order_by_field, order = kwargs['order_by']
+        SQL_request += ' ORDER BY %s %s' % (order_by_field, order)
+    return SQL_request
 
 def query_sum(total_by, field, criteria):
     table = fields_type_mapping[total_by]
@@ -39,7 +39,6 @@ def query_sum(total_by, field, criteria):
         return total
     else:
         return 0.00
-
 
 def create_table(table):
     if table == 'contacts':
@@ -84,6 +83,9 @@ def exists(sql_request):
     return out
 
 def pull_data(SQL_request):
+    '''
+    Inputs SQL_request, outputs records
+    '''
     conn = connect(DATABASE)
     c = conn.cursor()
     try:
@@ -129,8 +131,9 @@ def field_name(field):
     name =  sql_table_name + '.' + field
     return name
 
-
-
+def delete_where(table, field, criteria):
+    sql_request = 'DELETE FROM %s WHERE %s="%s"' % (tables[table], field, criteria)
+    execute_sql(sql_request)
 
 
 sales_report1 = 'SELECT test_table4.First_name, test_table4.Address1, sales2.Amount FROM sales2 INNER JOIN test_table4 ON sales2.Customer_ID=test_table4.ID'
@@ -158,4 +161,3 @@ sales_sample_data = [
     [11,111.23,'20160407'],
     [9,145.96,'20160408']
 ]
-
