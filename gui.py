@@ -1,11 +1,11 @@
 __author__ = 'aschwartz - Schwartz210@gmail.com'
-from db_interface import add_record, pull_data, update_record, field_name, query_sum, fields_type_mapping, flexible_SQL, delete_where
+from db_interface import add_record, pull_data, update_record, field_name, query_sum, fields_type_mapping, flexible_SQL, delete_where, update_all_cust_totals
 from excel import export
 from tkinter import *
 from functools import partial
 from PIL import Image, ImageTk
 
-type_to_fields = {'contacts': ['ID', 'First_name', 'Last_name','Address1', 'Address2','City','State','Zip','Phone'],
+type_to_fields = {'contacts': ['ID', 'First_name', 'Last_name','Address1', 'Address2','City','State','Zip','Phone', 'Total_sales'],
                   'sales' : ['Order_num', 'Customer_ID', 'Amount', 'Order_date']}
 
 special_id = {'contacts' : 'ID',
@@ -82,12 +82,12 @@ class HomeScreen(object):
         Report('sales', fields)
 
     def customer_center(self):
-        fields = ['Last_name', 'First_name']
+        fields = ['Last_name', 'First_name', 'Total_sales']
         CustomerCenter('contacts', fields)
 
     def customer_sales_total(self):
-        fields = ['Last_name', 'First_name', 'Amount']
-        Report('contacts', fields, 'Amount')
+        fields = ['Last_name', 'First_name', 'Total_sales']
+        Report('contacts', fields)
 
 
 class CreateRecordWindow(object):
@@ -195,21 +195,6 @@ class Report(object):
         field_query = self.build_field_query()
         sql_request = flexible_SQL(field_query[:-1], self.report_type, where=self.filter_by, order_by=self.ordered_field)
         self.data = pull_data(sql_request)
-        if self.total_amount:
-            self.aggregation_handler()
-
-    def aggregation_handler(self):
-        '''
-        This method is used for summing many sales orders and passing on the amount. Summation is done in SQL not-
-        python.
-        '''
-        field_equiv = {'Amount' : 'Customer_ID'}
-        field = field_equiv[self.total_amount]
-        ind = self.fields.index(self.sp_field)
-        if self.total_amount:
-            for record in self.data:
-                total = query_sum(self.total_amount, field, record[ind])
-                record.append(total)
 
     def canvas_master_processs(self):
         '''
@@ -252,42 +237,41 @@ class Report(object):
                    command=partial(self.custom_sort,iterator_column)).grid(row=1, column=iterator_column)
             iterator_column += 1
 
+    def sized_record(self, record):
+        if self.sp_field in self.display_fields:
+            return record
+        else:
+            return record[1:]
+
     def layout_buttons(self):
         '''
-        This deplorable method lays out the buttons on the report screen. This badly needs to be refactored.
+        Lays out buttons
         '''
         iterator_row = 2
         total_index = self.get_total_index()
         for record in self.data:
             iterator_field = 0
-            if self.sp_field in self.display_fields:
-                for field in record:
-                    if record.index(field) == total_index:
-                        Button(self.canvas2,text=field,width=self.button_width[iterator_field],height=1,borderwidth=0,command=partial(self.open_total_amount_window,record[0]),anchor=W).grid(row=iterator_row,column=iterator_field,sticky=S)
-                    else:
-                        Button(self.canvas2,text=field,width=self.button_width[iterator_field],height=1,borderwidth=0,command=partial(self.open_record_window,record[0]),anchor=W).grid(row=iterator_row,column=iterator_field,sticky=S)
-                    iterator_field += 1
-            else:
-                for field in record[1:]:
-                    if record.index(field) == total_index:
-                        Button(self.canvas2,text=field,width=self.button_width[iterator_field],height=1,borderwidth=0,command=partial(self.open_total_amount_window,record[0]),anchor=W).grid(row=iterator_row,column=iterator_field,sticky=S)
-                    else:
-                        Button(self.canvas2,text=field,width=self.button_width[iterator_field],height=1,borderwidth=0,command=partial(self.open_record_window,record[0]),anchor=W).grid(row=iterator_row,column=iterator_field,sticky=S)
-                    iterator_field += 1
+            for field in self.sized_record(record):
+                if record.index(field) == total_index:
+                    Button(self.canvas2,text=field,width=self.button_width[iterator_field],height=1,borderwidth=0,command=partial(self.open_total_amount_window,record[0]),anchor=W).grid(row=iterator_row,column=iterator_field,sticky=S)
+                else:
+                    Button(self.canvas2,text=field,width=self.button_width[iterator_field],height=1,borderwidth=0,command=partial(self.open_record_window,record[0]),anchor=W).grid(row=iterator_row,column=iterator_field,sticky=S)
+                iterator_field += 1
             iterator_row += 1
 
     def get_total_index(self):
         '''
         Returns the index for the field that is getting totalled, or None if n/a
         '''
-        if self.total_amount:
-            return self.fields.index(self.total_amount)
+        if 'Total_sales' in self.fields:
+            return self.fields.index('Total_sales')
         return None
 
     def refresh_report(self):
         '''
         Submits a new SQL query and erases and lays out all GUI window elements.
         '''
+        update_all_cust_totals()
         self.get_sql_data()
         self.canvas_master_processs()
 
@@ -350,8 +334,10 @@ class CustomerCenter(Report):
     This window shows the customer name and how much in sales order came from them. It was an important lesson in-
     cross-referencing data from different tables.
     '''
-    def __init__(self, report_type, fields):
+    def __init__(self, report_type, fields, total_amount=None, filter_by=None):
         self.report_type = report_type
+        self.total_amount = total_amount
+        self.filter_by = filter_by
         self.sp_field = special_id[self.report_type]
         self.set_fields(fields)
         self.master = Toplevel()
@@ -363,6 +349,9 @@ class CustomerCenter(Report):
         self.refresh_report()
 
     def canvas_master_processs(self):
+        '''
+        Handles GUI.
+        '''
         self.canvas1.destroy()
         self.canvas2.destroy()
         self.canvas3.destroy()
@@ -390,18 +379,22 @@ class RecordWindow(object):
         self.entries = []
         self.master = Toplevel()
         self.master.iconbitmap('image/record.ico')
-        self.get_data()
+        self.set_data()
         self.build_canvas()
 
-    def get_data(self):
+    def set_data(self):
+        '''
+        Sets the self.data attribute
+        '''
         where = [self.sp_field, self.ID]
         sql_request = flexible_SQL('*', self.report_type, where=where)
-        try:
-            self.data = pull_data(sql_request)[0]
-        except:
-            self.data = pull_data(sql_request)
+        self.data = pull_data(sql_request)[0]
+
 
     def build_canvas(self):
+        '''
+        Handles primary gui elements
+        '''
         self.canvas = Canvas(self.master, width=self.width, height=self.height)
         self.photo_edit = ImageTk.PhotoImage(Image.open('image/edit.png'))
         self.photo_exit = ImageTk.PhotoImage(Image.open('image/exit.png'))
@@ -418,6 +411,9 @@ class RecordWindow(object):
         self.canvas.grid()
 
     def edit_record(self):
+        '''
+        Binded handler for editing a record.
+        '''
         self.canvas.destroy()
         self.canvas = Canvas(self.master, width=self.width, height=self.height)
         iterator = 0
@@ -428,7 +424,6 @@ class RecordWindow(object):
             iterator += 1
         iterator = 0
         Label(self.canvas, text=self.data[0]).grid(row=iterator, column=1, sticky=W)
-
         for field in self.data[1:]:
             a = StringVar()
             a.set(field)
@@ -441,6 +436,9 @@ class RecordWindow(object):
         self.canvas.grid()
 
     def save_record(self):
+        '''
+        Handler for saving record
+        '''
         record = [null_entry_handler(entry) for entry in self.entries if entry]
         record.append(self.ID)
         update_record(self.report_type, record)
@@ -448,6 +446,9 @@ class RecordWindow(object):
         self.__init__(self.report_type, self.ID)
 
     def delete_record(self):
+        '''
+        Handler for deleting record
+        '''
         delete_parameters = (self.report_type, self.sp_field, self.ID)
         DeleteRecordWindow(delete_parameters)
         self.master.destroy()
@@ -465,6 +466,9 @@ class CustomizeReportWindow(object):
         self.layout()
 
     def layout(self):
+        '''
+        Manages GUI
+        '''
         self.width = 100
         self.height = 100
         iterator = 1
@@ -484,6 +488,8 @@ class CustomizeReportWindow(object):
         fields = [field.replace(' ','_') for field in self.check_dict.keys() if self.check_dict[field] == 1]
         self.master.destroy()
         Report(self.report_type,fields)
+
+
 
 
 class DeleteRecordWindow(object):

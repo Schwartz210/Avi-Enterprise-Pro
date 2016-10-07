@@ -1,7 +1,7 @@
 __author__ = 'aschwartz - Schwartz210@gmail.com'
 from sqlite3 import connect
 DATABASE = 'test.db'
-tables = {'contacts' :'test_table4',
+tables = {'contacts' :'test_table5',
           'sales' : 'sales5'}
 
 fields_type_mapping = {'ID' : 'contacts',
@@ -13,6 +13,7 @@ fields_type_mapping = {'ID' : 'contacts',
                        'State' : 'contacts',
                        'Zip' : 'contacts',
                        'Phone' : 'contacts',
+                       'Total_sales' : 'contacts',
                        'Order_num' : 'sales',
                        'Customer_ID' : 'sales',
                        'Amount' : 'sales',
@@ -23,7 +24,7 @@ def flexible_SQL(get_fields, table, **kwargs):
     Returns a SQL_request(string). Supports 'WHERE' and 'ORDER BY' statements.
     '''
     SQL_request =  'SELECT %s FROM %s' % (get_fields, tables[table])
-    if kwargs['where']:
+    if 'where' in kwargs and kwargs['where']:
         where_field, criteria = kwargs['where']
         SQL_request += ' WHERE %s="%s"' % (where_field, criteria)
     if 'order_by' in kwargs and kwargs['order_by']:
@@ -42,7 +43,7 @@ def query_sum(total_by, field, criteria):
 
 def create_table(table):
     if table == 'contacts':
-        sql_request = 'CREATE TABLE %s(ID INTEGER PRIMARY KEY AUTOINCREMENT, First_name, Last_name, Address1, Address2, City, State, Zip, Phone)' % (tables[table])
+        sql_request = 'CREATE TABLE %s(ID INTEGER PRIMARY KEY AUTOINCREMENT, First_name, Last_name, Address1, Address2, City, State, Zip, Phone, Total_sales)' % (tables[table])
     elif table == 'sales':
         sql_request = 'CREATE TABLE %s (Order_num INTEGER PRIMARY KEY AUTOINCREMENT, Customer_ID, Amount Decimal(19,2), Order_date DATE)' % (tables[table])
     else:
@@ -99,7 +100,7 @@ def pull_data(SQL_request):
 
 def add_record(table, record):
     if table == 'contacts':
-        sql_request = 'INSERT INTO %s VALUES(NULL, "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s")' % (tables[table], record[0], record[1], record[2], record[3], record[4], record[5], record[6], record[7])
+        sql_request = 'INSERT INTO %s VALUES(NULL, "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s", NULL)' % (tables[table], record[0], record[1], record[2], record[3], record[4], record[5], record[6], record[7])
     elif table == 'sales':
         sql_request = 'INSERT INTO %s VALUES(NULL, "%s", %s, "%s")' % (tables[table], record[0], record[1], record[2])
     else:
@@ -118,7 +119,7 @@ def update_record(table, values):
                                                                           values[5],
                                                                           values[6],
                                                                           values[7],
-                                                                          values[8])
+                                                                          values[9])
     elif table == 'sales':
         sql_request = 'UPDATE %s SET Customer_ID="%s", Amount=%s, Order_date="%s" WHERE ID="%s"' % (tables[table], values[0], values[1], values[2],values[3])
     else:
@@ -133,6 +134,18 @@ def field_name(field):
 
 def delete_where(table, field, criteria):
     sql_request = 'DELETE FROM %s WHERE %s="%s"' % (tables[table], field, criteria)
+    execute_sql(sql_request)
+
+
+def update_all_cust_totals():
+    sql_request = 'SELECT DISTINCT ID FROM %s' % (tables['contacts'])
+    ids = pull_data(sql_request)
+    for ID in ids:
+        update_customer_total(ID[0])
+
+def update_customer_total(ID):
+    amount = query_sum('Amount', 'Customer_ID', ID)
+    sql_request = 'UPDATE %s SET Total_sales=%s WHERE ID=%s' % (tables['contacts'], amount, ID)
     execute_sql(sql_request)
 
 
@@ -161,3 +174,21 @@ sales_sample_data = [
     [11,111.23,'20160407'],
     [9,145.96,'20160408']
 ]
+
+contacts_sample_data = [
+    ['Benjamin','Sisko','88 Market St','','New Orleans','Louisiana','78451','NULL'],
+    ['Will','Riker','78 Terrace Ave.','','Elizabeth','New Jersey','85632','745-854-2222'],
+    ['Avi','Schwartz','000 Omega Ave.','','New York','New York','10555','000-000-0000'],
+    ['Geordi','La Forge','422 Cindarella Dr.','#D14','Buffalo','New York','44444','NULL'],
+    ['Kathryn','Janeway','55 East Lance Blvd.','','Sarasoda','Florida','63265','NULL'],
+    ['Tom','Paris','789 Paris Dr.','Apt #55','Pheonix','New Mexico','45621','NULL'],
+    ['BElanna','Torres','856 Marreyweather St.','','Chronos','Michigan','85231','NULL'],
+    ['Beverly','Crusher','56 Palm Rd.','3rd Floor','Tampa Bay','California','42689','565-701-7893'],
+    ['Deanna','Troi','333 Lexington Ave.','Suite 22','New York','New York','10603','444-285-9764'],
+    ['James','Kirk','551 Enterprise St.','Floor 6','Riverside','Iowa','52327','999-875-4425'],
+    ['Jean-Luc','Picard','89 Drexel Rd.','','Paris','Florida','89898','741-256-8989'],
+    ['Harry','Kim','856 Rocky Rd.','Apt 16','San Diego','California','74521','NULL'],
+    ['Leonard','McCoy','745 Doctor Drive','668','Pensicola','Florida','75139','NULL']
+]
+
+
